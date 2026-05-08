@@ -1,0 +1,132 @@
+{
+    "id": "week4-basic-application",
+    "name": "Обработка заявок с AI-классификацией",
+    "active": true,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "application",
+                "responseMode": "onReceived",
+                "options": {}
+            },
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [250, 300],
+            "webhookId": "unique-webhook-id"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "={{ 'Bearer ' + $env.YANDEX_IAM_TOKEN }}"
+                        },
+                        {
+                            "name": "x-folder-id",
+                            "value": "={{ $env.YANDEX_FOLDER_ID }}"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "json",
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ modelUri: 'gpt://' + $env.YANDEX_FOLDER_ID + '/yandexgpt/latest', completionOptions: { stream: false, temperature: 0.3, maxTokens: '200' }, messages: [{ role: 'system', text: 'Классифицируй заявку как одну из категорий: техническая_поддержка, продажа, вопрос, жалоба. Ответь только названием категории.' }, { role: 'user', text: $node[\"Webhook\"].json.body.message || '' }] }) }}",
+                "options": {}
+            },
+            "name": "YandexGPT Classifier",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [450, 300]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "{{ $json.result.alternatives[0].message.text }}",
+                            "operation": "equals",
+                            "value2": "техническая_поддержка"
+                        }
+                    ]
+                }
+            },
+            "name": "IF Tech Support",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [650, 300]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ 'https://api.telegram.org/bot' + ($env.TELEGRAM_BOT_TOKEN || $env.TG_BOT_TOKEN) + '/sendMessage' }}",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "chat_id",
+                            "value": "={{ $env.TELEGRAM_CHAT_ID || $env.TG_CHAT_ID || $node[\"Webhook\"].json.body.telegram_chat_id || $node[\"Webhook\"].json.body.chat_id }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "=🤖 Ответ модели: {{ $json.result.alternatives[0].message.text }}\n\nЗаявка: {{ $node[\"Webhook\"].json.body.message }}\nКонтакт: {{ $node[\"Webhook\"].json.body.contact }}\nПриоритет: {{ $node[\"Webhook\"].json.body.priority }}"
+                        }
+                    ]
+                }
+            },
+            "name": "Telegram Notification",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [850, 300]
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "YandexGPT Classifier",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "YandexGPT Classifier": {
+            "main": [
+                [
+                    {
+                        "node": "Telegram Notification",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "IF Tech Support": {
+            "main": [
+                [
+                    {
+                        "node": "Telegram Notification",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": []
+}

@@ -1,0 +1,125 @@
+{
+    "id": "week4-graph-digitization-analysis",
+    "name": "Анализ данных графика функции для дипломной системы",
+    "description": "Специализированный workflow для оценки данных, извлечённых с графиков функций: проверяет полноту точек, наличие сведений об осях, качество цифровизации и готовность набора к числовому преобразованию.",
+    "author": "Жданов Никита Валерьевич",
+    "specialty": "Фундаментальная информатика и информационные технологии",
+    "diploma_topic": "Информационная система по извлечению и преобразованию числовых данных с графиков функций",
+    "active": true,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "graph-digitization-analysis",
+                "responseMode": "onReceived",
+                "options": {}
+            },
+            "name": "Graph Data Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ],
+            "webhookId": "week4-graph-digitization-webhook"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "={{ 'Bearer ' + $env.YANDEX_IAM_TOKEN }}"
+                        },
+                        {
+                            "name": "x-folder-id",
+                            "value": "={{ $env.YANDEX_FOLDER_ID }}"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "json",
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ modelUri: 'gpt://' + $env.YANDEX_FOLDER_ID + '/yandexgpt/latest', completionOptions: { stream: false, temperature: 0.2, maxTokens: '700' }, messages: [{ role: 'system', text: 'Ты специализированный аналитический модуль дипломной системы: \"Информационная система по извлечению и преобразованию числовых данных с графиков функций\". Проанализируй входные данные цифровизации графика функции. Оцени: тип графика, качество изображения, наличие информации об осях, количество и пригодность извлечённых точек, диапазоны X и Y, монотонность или характер изменения, риски дальнейшего преобразования, готовность данных к числовому преобразованию, интерполяции/аппроксимации и экспорту. Ответь кратким структурированным отчётом на русском языке с разделами: 1) Сводка, 2) Оценка качества данных, 3) Риски, 4) Рекомендации, 5) Вердикт готовности.' }, { role: 'user', text: JSON.stringify({ task: $json.body.task || 'Оцени пригодность извлечённых данных графика функции к дальнейшему числовому преобразованию', chart_type: $json.body.chart_type || $json.body.graph_type || 'line', image_quality: $json.body.image_quality || 'unknown', axis_info: $json.body.axis_info || {}, graph_points: $json.body.graph_points || $json.body.extracted_points || $json.body.points || [], source_image: $json.body.source_image || null, notes: $json.body.notes || $json.body.data || '' }) }] }) }}",
+                "options": {}
+            },
+            "name": "Graph Data Analyzer",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                520,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ 'https://api.telegram.org/bot' + ($env.TELEGRAM_BOT_TOKEN || $env.TG_BOT_TOKEN) + '/sendMessage' }}",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "chat_id",
+                            "value": "={{ $env.TELEGRAM_CHAT_ID || $env.TG_CHAT_ID || $node[\"Graph Data Webhook\"].json.body.telegram_chat_id || $node[\"Graph Data Webhook\"].json.body.chat_id }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ 'Анализ графика функции\\n\\nОтвет модели:\\n' + $json.result.alternatives[0].message.text + '\\n\\nТип графика: ' + ($node[\"Graph Data Webhook\"].json.body.chart_type || $node[\"Graph Data Webhook\"].json.body.graph_type || 'не указан') + '\\nКачество изображения: ' + ($node[\"Graph Data Webhook\"].json.body.image_quality || 'не указано') + '\\nКоличество точек: ' + (($node[\"Graph Data Webhook\"].json.body.graph_points || $node[\"Graph Data Webhook\"].json.body.extracted_points || $node[\"Graph Data Webhook\"].json.body.points || []).length) }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "name": "Telegram Report",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                790,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Graph Data Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Graph Data Analyzer",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Graph Data Analyzer": {
+            "main": [
+                [
+                    {
+                        "node": "Telegram Report",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "staticData": null,
+    "tags": [
+        {
+            "name": "diploma"
+        },
+        {
+            "name": "graph-digitization"
+        }
+    ]
+}
