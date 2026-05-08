@@ -137,6 +137,7 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+week5/data/chroma_db/
 .venv
 env/
 venv/
